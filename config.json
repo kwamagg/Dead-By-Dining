@@ -1,0 +1,160 @@
+{
+    "modName": "DeadByDining",
+    "displayName": "Dead By Dining",
+    "minMcmVersion": 9,
+    "pluginRequirements": [],
+    "cursorFillMode": "topToBottom",
+    "content": [],
+    "customContent": {},
+    "pages": [
+        {
+            "pageDisplayName": "General",
+            "cursorFillMode": "topToBottom",
+            "content": [
+                {
+                    "type": "header",
+                    "text": "Allowed Poisons Amount"
+                },
+                {
+                    "id": "imaxPoisonsAmount:General",
+                    "type": "slider",
+                    "text": "Slider",
+                    "help": "Determines the maximum amount of poisons that can be applied to an item.",
+                    "valueOptions": {
+			"min": 1,
+    			"max": 100,
+   			"step": 1,
+			"sourceType": "ModSettingInt",
+			"defaultValue": 10
+                    }
+                },
+                {
+                    "type": "header",
+                    "text": "Detection Radius",
+		    "position": 1
+                },
+                {
+                    "id": "imaxBottleDetectionRadius:General",
+                    "type": "slider",
+                    "text": "Slider",
+                    "help": "Determines the maximum distance at which an NPC can detect and consume an item. If you don't want these mechanics, or if you are using it with mods for improved AI, allowing NPCs to eat actual food - set it to 0.",
+                    "valueOptions": {
+			"min": 0,
+    			"max": 5000,
+   			"step": 10,
+			"sourceType": "ModSettingInt",
+			"defaultValue": 1250
+                    }
+                },
+		{
+                    "type": "header",
+                    "text": "Minimal Bottle Detection Time"
+                },
+                {
+                    "id": "fminBottleDetectionTime:General",
+                    "type": "slider",
+                    "text": "Slider",
+                    "help": "Determines the minimum amount of time (in seconds) required for an NPC to detect and consume your item.",
+                    "valueOptions": {
+			"min": 1.0,
+    			"max": 100.0,
+   			"step": 0.5,
+			"sourceType": "ModSettingFloat",
+			"defaultValue": 2.0,
+			"formatString": "{1}"
+                    }
+                },
+		{
+                    "type": "header",
+                    "text": "Maximum Bottle Detection Time"
+                },
+                {
+                    "id": "fmaxBottleDetectionTime:General",
+                    "type": "slider",
+                    "text": "Slider",
+                    "help": "Determines the maximum amount of time (in seconds) required for an NPC to detect and consume your item.",
+                    "valueOptions": {
+			"min": 2.0,
+    			"max": 100.0,
+   			"step": 0.5,
+			"sourceType": "ModSettingFloat",
+			"defaultValue": 20.0,
+			"formatString": "{1}"
+                    }
+                }
+            ]
+        },
+        {
+            "pageDisplayName": "Maintenance",
+            "cursorFillMode": "topToBottom",
+            "content": [
+                {
+                    "type": "header",
+                    "text": "Autoload Settings"
+                },
+                {
+                    "id": "bEnabled:Maintenance",
+                    "type": "toggle",
+                    "text": "Enabled",
+                    "help": "Uncheck this option if you want this mod variables not to be loaded. This does not apply to variables in the settings file and when the script is upgraded to a newer version. Disabling this option is useful when there are conflicts with other mods during autoload.",
+                    "valueOptions": {
+                        "sourceType": "ModSettingBool",
+                        "defaultValue": true
+                    }
+                },
+                {
+                    "id": "iLoadingDelay:Maintenance",
+                    "type": "slider",
+                    "text": "Loading Delay",
+                    "help": "Settings loading delay in seconds. Useful if the mod takes time to initialize on your system.",
+                    "valueOptions": {
+                        "min": 0,
+                        "max": 600,
+                        "step": 1,
+                        "defaultValue": 0,
+                        "sourceType": "ModSettingInt",
+                        "formatString": "{0}"
+                    }
+                },
+                {
+                    "id": "sLoadSettings:Maintenance",
+                    "type": "text",
+                    "text": "Load Settings",
+                    "help": "Forces the modification to reload the settings. Useful if autoloading is disabled.",
+                    "valueOptions": {
+                        "sourceType": "ModSettingString",
+                        "defaultValue": ""
+                    },
+                    "action": {
+                        "type": "CallFunction",
+                        "function": "Load"
+                    }
+                },
+                {
+                    "id": "sResetSettings:Maintenance",
+                    "type": "text",
+                    "text": "Reset Settings",
+                    "help": "Reset settings to default values.",
+                    "valueOptions": {
+                        "sourceType": "ModSettingString",
+                        "defaultValue": ""
+                    },
+                    "action": {
+                        "type": "CallFunction",
+                        "function": "Default"
+                    }
+                },
+                {
+                    "id": "bLoadSettingsonReload:Maintenance",
+                    "type": "toggle",
+                    "text": "Load Settings on Reload",
+                    "help": "Check this option if you want the settings to be loaded every time you load the game. Useful if you have something that reverts settings. This option will not work if you disabled Autoload.",
+                    "valueOptions": {
+                        "sourceType": "ModSettingBool",
+                        "defaultValue": false
+                    }
+                }
+            ]
+        }
+    ]
+}
