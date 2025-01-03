@@ -1,11 +1,13 @@
 Scriptname DeadByDining extends ReferenceAlias
 
+
 Actor Property DBD_Player Auto
 ObjectReference Property DBD_Container Auto
 
 Keyword Property DBD_Drink Auto
 Keyword Property DBD_Poison Auto
 
+GlobalVariable Property DBD_Hotkey Auto
 GlobalVariable Property DBD_maxPoisonsAmount Auto
 GlobalVariable Property DBD_maxBottleDetectionRadius Auto
 GlobalVariable Property DBD_minBottleDetectionTime Auto
@@ -29,23 +31,16 @@ EndEvent
 
 
 Function DBD_SetUp()
-    PO3_Events_Alias.RegisterForObjectGrab(self)
+    RegisterForKey(DBD_Hotkey.GetValueInt())
     DbSkseEvents.RegisterAliasForGlobalEvent("OnContainerChangedGlobal", self)
     DbSkseEvents.RegisterAliasForGlobalEvent("OnObjectEquippedGlobal", self)
-    String iniPath = "Data/DeadByDiningSaves/" + DBD_Player.GetDisplayName() + "_DeadByDining.ini"
-
-    If !MiscUtil.FileExists(iniPath)
-        MiscUtil.WriteToFile(iniPath, "[BottlePoisons]")
-    EndIf
-
     RegisterForCrosshairRef()
 EndFunction
 
 
 Function DBD_Poison(Actor akActor, Form akBaseObject, ObjectReference akReference)
-    String iniPath = "Data/DeadByDiningSaves/" + DBD_Player.GetDisplayName() + "_DeadByDining.ini"
-    String poisons = DbIniFunctions.GetIniString(iniPath, "BottlePoisons", akReference.GetFormID(), "")
-
+    String poisons = StorageUtil.GetStringValue(None, "BottlePoisons_" + akReference.GetFormID())
+    
     If poisons != ""
         String[] poisonRefs = StringUtil.Split(poisons, ",")
         Int index = 0
@@ -59,11 +54,6 @@ Function DBD_Poison(Actor akActor, Form akBaseObject, ObjectReference akReferenc
                 akActor.EquipItem(poisonForm, False, True)
             EndIf
 
-            If (akActor != Game.GetPlayer()) && (poisonForm as Potion).IsPoison()
-                If !akActor.IsHostileToActor(DBD_Player)
-                    akActor.SendAssaultAlarm()
-                EndIf
-            EndIf
             index += 1
         EndWhile
     EndIf
@@ -71,49 +61,78 @@ EndFunction
 
 
 Event OnCrosshairRefChange(ObjectReference ref)
-    String iniPath = "Data/DeadByDiningSaves/" + DBD_Player.GetDisplayName() + "_DeadByDining.ini"
-
     ;A workaround for that a bottle ref differs from its actual one upon hovering the crosshair.
     ConsoleUtil.SetSelectedReference(ref)
-
     If ConsoleUtil.GetSelectedReference().HasKeyword(DBD_Drink)
-        observedBottle = ConsoleUtil.GetSelectedReference()
+        If StorageUtil.GetStringValue(None, "BottlePoisons_" + ConsoleUtil.GetSelectedReference().GetFormID()) != ""
+            observedBottle = ConsoleUtil.GetSelectedReference()
 
-        Float minTime = DBD_minBottleDetectionTime.GetValue()
-        Float maxTime = DBD_maxBottleDetectionTime.GetValue()
+            Float minTime = DBD_minBottleDetectionTime.GetValue()
+            Float maxTime = DBD_maxBottleDetectionTime.GetValue()
 
-        If minTime >= maxTime
-            maxTime = minTime + 0.5
+            If minTime >= maxTime
+                maxTime = minTime + 0.5
+            EndIf
+
+            Float DBD_BottleDetectionTime = Utility.RandomFloat(minTime, maxTime)
+            RegisterForUpdate(DBD_BottleDetectionTime)
         EndIf
-
-        Float DBD_BottleDetectionTime = Utility.RandomFloat(minTime, maxTime)
-        RegisterForSingleUpdate(DBD_bottleDetectionTime)
     EndIf
 EndEvent
 
 
 Event OnUpdate()
+    RegisterForUpdate(5)
+
     Actor npc = Game.FindClosestActorFromRef(observedBottle, DBD_maxBottleDetectionRadius.GetValue())
     If npc && (npc != Game.GetPlayer())
+        If npc.GetSleepState() == 3
+            Debug.SendAnimationEvent(npc, "IdleBedGetUp")
+        ElseIf npc.GetSitState() == 3
+            Debug.SendAnimationEvent(npc, "IdleChairGetUp")
+        EndIf
+
         Debug.SendAnimationEvent(npc, "IdleActivatePickUp")
         Utility.Wait(2)
+
         DBD_Poison(npc, observedBottle.GetBaseObject(), observedBottle)
         npc.EquipItem(observedBottle.GetBaseObject())
         observedBottle.Disable()
         observedBottle.Delete()
         observedBottle = None
+
+        If !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc)
+            npc.SendAssaultAlarm()
+        EndIf
+
+        UnregisterForUpdate()
     EndIf
 EndEvent
 
 
-Event OnObjectGrab(ObjectReference akObjectRef)
-    currentBottle = akObjectRef
-    If currentBottle.HasKeyword(DBD_Drink) && DBD_Player.IsSneaking()
-        Int buttonIndex = SkyMessage.Show("What would you like to do?", "Spike", "Cancel", getIndex = True) as Int
-        If buttonIndex == 0
-            currentBottleName = ""
-            currentBottleName += currentBottle.GetBaseObject().GetName() + " Spiked With "
-            DBD_Container.Activate(DBD_Player)
+Event OnKeyDown(int keyCode)
+    If (keyCode == DBD_Hotkey.GetValueInt()) && !Utility.IsInMenuMode() && !UI.IsMenuOpen("Crafting Menu") && !UI.IsMenuOpen("ContainerMenu") && !UI.IsMenuOpen("MessageBoxMenu") && !UI.IsMenuOpen("InventoryMenu") && !UI.IsMenuOpen("Console") && !UI.IsMenuOpen("BarterMenu") && !UI.IsTextInputEnabled()
+        ConsoleUtil.SetSelectedReference(Game.GetCurrentCrosshairRef())
+
+        If ConsoleUtil.GetSelectedReference().HasKeyword(DBD_Drink)
+            currentBottle = ConsoleUtil.GetSelectedReference()
+            Int buttonIndex = SkyMessage.Show("What would you like to do?", "Poison", "Cancel", getIndex = True) as Int
+
+            If buttonIndex == 0
+                If StorageUtil.GetStringValue(None, "BottlePoisons_" + currentBottle.GetFormID()) == ""
+                    currentBottleName = ""
+                    currentBottleName += currentBottle.GetBaseObject().GetName() + " Poisoned With "
+                Else
+                    currentBottleName = currentBottle.GetDisplayName()
+                EndIf
+
+                Actor npc = Game.FindClosestActorFromRef(currentBottle, DBD_maxBottleDetectionRadius.GetValue())
+                If npc && !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc)
+                    npc.SendAssaultAlarm()
+                EndIf
+
+                DBD_Container.Activate(DBD_Player)
+            EndIf
         EndIf
     EndIf
 EndEvent
@@ -121,15 +140,13 @@ EndEvent
 
 Event OnContainerChangedGlobal(ObjectReference newContainer, ObjectReference oldContainer, ObjectReference itemReference, Form baseObj, int itemCount)
     If baseObj.HasKeyword(DBD_Poison) && (newContainer == DBD_Container)
-
         DBD_Container.RemoveItem(baseObj, itemCount, True)
-
-        String iniPath = "Data/DeadByDiningSaves/" + DBD_Player.GetDisplayName() + "_DeadByDining.ini"
-        String currentPoisons = DbIniFunctions.GetIniString(iniPath, "BottlePoisons", currentBottle.GetFormID(), "")
-        DbIniFunctions.SetIniString(iniPath, "BottlePoisons", currentBottle.GetFormID(), "", True)
+    
+        String currentPoisons = StorageUtil.GetStringValue(None, "BottlePoisons_" + currentBottle.GetFormID())
+        StorageUtil.SetStringValue(None, "BottlePoisons_" + currentBottle.GetFormID(), "")
         String[] poisonArray = StringUtil.Split(currentPoisons, ",")
         Int currentPoisonCount = poisonArray.Length
-
+        
         If (currentPoisonCount + itemCount) <= DBD_maxPoisonsAmount.GetValueInt()
             While itemCount > 0
                 If currentPoisons != ""
@@ -139,30 +156,33 @@ Event OnContainerChangedGlobal(ObjectReference newContainer, ObjectReference old
                 EndIf
                 itemCount -= 1
             EndWhile
-            DbIniFunctions.SetIniString(iniPath, "BottlePoisons", currentBottle.GetFormID(), currentPoisons, True)
+
+            StorageUtil.SetStringValue(None, "BottlePoisons_" + currentBottle.GetFormID(), currentPoisons)
             Debug.Notification("Successfully added.")
+
+            If currentBottleName != (currentBottle.GetBaseObject().GetName() + " Poisoned With ")
+                currentBottleName += ", " + baseObj.GetName()
+            Else
+                currentBottleName += baseObj.GetName()
+            EndIf
+
+            currentBottle.SetDisplayName(currentBottleName, True)
+            currentBottle.SendStealAlarm(DBD_Player)
         Else
             Debug.Notification("You cannot add more than " + DBD_maxPoisonsAmount.GetValueInt() + " poisons.")
             DBD_Container.RemoveItem(baseObj, itemCount, True)
             DBD_Player.AddItem(baseObj, itemCount, True)
+            currentBottle.SendStealAlarm(DBD_Player)
         EndIf
 
-        If currentBottleName != (currentBottle.GetBaseObject().GetName() + " Spiked With ")
-            currentBottleName += ", " + baseObj.GetName()
-        Else
-            currentBottleName += baseObj.GetName()
-        EndIf
-        currentBottle.SetDisplayName(currentBottleName, True)
-    
     ElseIf !baseObj.HasKeyword(DBD_Poison) && (newContainer == DBD_Container)
         Debug.Notification("You cannot add it there.")
         DBD_Container.RemoveItem(baseObj, itemCount, True)
         DBD_Player.AddItem(baseObj, itemCount, True)
 
-    ElseIf baseObj.HasKeyword(DBD_Drink) && (newContainer as Actor) && (newContainer != Game.GetPlayer()) && (oldContainer == Game.GetPlayer())
+    ElseIf baseObj.HasKeyword(DBD_Drink) && (newContainer as Actor) && (newContainer != Game.GetPlayer()) && (oldContainer == Game.GetPlayer()) && (StorageUtil.GetStringValue(None, "BottlePoisons_" + itemReference.GetFormID()) != "")
         currentActor = newContainer as Actor
         feltBottle = itemReference
-
         Float minTime = DBD_minBottleDetectionTime.GetValue()
         Float maxTime = DBD_maxBottleDetectionTime.GetValue()
 
@@ -190,6 +210,11 @@ Event OnUpdateGameTime()
         currentActor.EquipItem(feltBottle.GetBaseObject())
         feltBottle.Disable()
         feltBottle.Delete()
+
+        If !currentActor.IsHostileToActor(DBD_Player)
+            currentActor.SendAssaultAlarm()
+        EndIf
+
         currentActor = None
         feltBottle = None
     EndIf
