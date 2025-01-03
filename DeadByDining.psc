@@ -86,6 +86,7 @@ Event OnUpdate()
 
     Actor npc = Game.FindClosestActorFromRef(observedBottle, DBD_maxBottleDetectionRadius.GetValue())
     If npc && (npc != Game.GetPlayer())
+
         If npc.GetSleepState() == 3
             Debug.SendAnimationEvent(npc, "IdleBedGetUp")
         ElseIf npc.GetSitState() == 3
