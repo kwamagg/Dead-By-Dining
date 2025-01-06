@@ -3,6 +3,8 @@ Scriptname DeadByDiningMCM extends MCM_ConfigBase
 Quest Property DeadByDiningQuest Auto
 GlobalVariable Property DBD_Hotkey Auto
 GlobalVariable Property DBD_maxPoisonsAmount Auto
+GlobalVariable Property DBD_fakeAIEnabled Auto
+GlobalVariable Property DBD_falsePoisonerEnabled Auto
 GlobalVariable Property DBD_maxBottleDetectionRadius Auto
 GlobalVariable Property DBD_minBottleDetectionTime Auto
 GlobalVariable Property DBD_maxBottleDetectionTime Auto
@@ -57,6 +59,14 @@ Event OnSettingChange(String a_ID)
         DBD_maxPoisonsAmount.SetValue(GetModSettingInt("imaxPoisonsAmount:General") as Float)
         (DeadByDiningQuest.GetAlias(0) as ReferenceAlias).OnPlayerLoadGame()
         RefreshMenu()
+    ElseIf a_ID == "bfakeAIEnabled:General"
+        DBD_fakeAIEnabled.SetValue(GetModSettingBool("bfakeAIEnabled:General") as Float)
+        (DeadByDiningQuest.GetAlias(0) as ReferenceAlias).OnPlayerLoadGame()
+        RefreshMenu()
+    ElseIf a_ID == "bfalsePoisonerEnabled:General"
+        DBD_falsePoisonerEnabled.SetValue(GetModSettingBool("bfalsePoisonerEnabled:General") as Float)
+        (DeadByDiningQuest.GetAlias(0) as ReferenceAlias).OnPlayerLoadGame()
+        RefreshMenu()
     ElseIf a_ID == "imaxBottleDetectionRadius:General"
         DBD_maxBottleDetectionRadius.SetValue(GetModSettingInt("imaxBottleDetectionRadius:General") as Float)
         (DeadByDiningQuest.GetAlias(0) as ReferenceAlias).OnPlayerLoadGame()
@@ -78,7 +88,9 @@ EndEvent
 
 Function Default()
     SetModSettingInt("iHotkey:General", 35)
-    SetModSettingInt("imaxPoisonsAmount:General", 10)
+    SetModSettingInt("imaxPoisonsAmount:General", 5)
+    SetModSettingBool("bfakeAIEnabled:General", True)
+    SetModSettingBool("bfalsePoisonerEnabled:General", True)
     SetModSettingInt("imaxBottleDetectionRadius:General", 1250)
     SetModSettingFloat("fminBottleDetectionTime:General", 2.0)
     SetModSettingFloat("fmaxBottleDetectionTime:General", 20.0)
@@ -91,6 +103,8 @@ EndFunction
 Function Load()
     DBD_Hotkey.SetValue(GetModSettingInt("iHotkey:General") as Float)
     DBD_maxPoisonsAmount.SetValue(GetModSettingInt("imaxPoisonsAmount:General") as Float)
+    DBD_fakeAIEnabled.SetValue(GetModSettingBool("bfakeAIEnabled:General") as Float)
+    DBD_falsePoisonerEnabled.SetValue(GetModSettingBool("bfalsePoisonerEnabled:General") as Float)
     DBD_maxBottleDetectionRadius.SetValue(GetModSettingInt("imaxBottleDetectionRadius:General") as Float)
     DBD_minBottleDetectionTime.SetValue(GetModSettingFloat("fminBottleDetectionTime:General") as Float)
     DBD_maxBottleDetectionTime.SetValue(GetModSettingFloat("fmaxBottleDetectionTime:General") as Float)
@@ -108,6 +122,8 @@ EndFunction
 Function MigrateToMCMHelper()
     SetModSettingInt("iHotkey:General", DBD_Hotkey.GetValue() as Int)
     SetModSettingInt("imaxPoisonsAmount:General", DBD_maxPoisonsAmount.GetValue() as Int)
+    SetModSettingBool("bfakeAIEnabled:General", DBD_fakeAIEnabled.GetValue() as Bool)
+    SetModSettingBool("bfalsePoisonerEnabled:General", DBD_falsePoisonerEnabled.GetValue() as Bool)
     SetModSettingInt("imaxBottleDetectionRadius:General", DBD_maxBottleDetectionRadius.GetValue() as Int)
     SetModSettingFloat("fminBottleDetectionTime:General", DBD_minBottleDetectionTime.GetValue() as Float)
     SetModSettingFloat("fmaxBottleDetectionTime:General", DBD_maxBottleDetectionTime.GetValue() as Float)
