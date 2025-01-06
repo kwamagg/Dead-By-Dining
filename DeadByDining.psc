@@ -3,6 +3,7 @@ Scriptname DeadByDining extends ReferenceAlias
 
 Actor Property DBD_Player Auto
 ObjectReference Property DBD_Container Auto
+Faction Property Bandit Auto
 
 Keyword Property DBD_Drink Auto
 Keyword Property DBD_Poison Auto
@@ -10,12 +11,15 @@ Keyword Property DBD_Humanoid Auto
 Keyword Property DBD_Disallowed Auto
 
 GlobalVariable Property DBD_Hotkey Auto
+GlobalVariable Property DBD_fakeAIEnabled Auto
+GlobalVariable Property DBD_falsePoisonerEnabled Auto
 GlobalVariable Property DBD_maxPoisonsAmount Auto
 GlobalVariable Property DBD_maxBottleDetectionRadius Auto
 GlobalVariable Property DBD_minBottleDetectionTime Auto
 GlobalVariable Property DBD_maxBottleDetectionTime Auto
 
 Actor currentActor
+Actor potentialPoisoner
 ObjectReference currentBottle
 ObjectReference observedBottle
 ObjectReference feltBottle
@@ -25,67 +29,27 @@ String currentBottleName
 
 ; System Functions
 
-String[] Function RemoveStringAt(String[] akArray, Int aiIndex)
-    Int arrayLength = akArray.Length
-    If aiIndex < 0 || aiIndex >= arrayLength
-        Return akArray
-    EndIf
-
-    String[] newArray = Utility.CreateStringArray((arrayLength - 1), "")
-
-    Int newIndex = 0
-    Int i = 0
-
-    While i < arrayLength
-        If i != aiIndex
-            newArray[newIndex] = akArray[i]
-            newIndex += 1
-        EndIf
-        i += 1
-    EndWhile
-
-    Return newArray
-EndFunction
-
-
-String Function JoinStringArrayWithDelimiter(String[] akArray, String asDelimiter)
-    String result = ""
-    Int arrayLength = akArray.Length
-    Int i = 0
-
-    While i < arrayLength
-        result += akArray[i]
-        If i < arrayLength - 1
-            result += asDelimiter
-        EndIf
-        i += 1
-    EndWhile
-
-    Return result
-EndFunction
-
-
 Function DBD_SetUp()
     RegisterForKey(DBD_Hotkey.GetValueInt())
     DbSkseEvents.RegisterAliasForGlobalEvent("OnContainerChangedGlobal", self)
-    DbSkseEvents.RegisterAliasForGlobalEvent("OnObjectEquippedGlobal", self)
-    RegisterForCrosshairRef()
+    If (DBD_fakeAIEnabled.GetValue() == 1.0)
+        RegisterForCrosshairRef()
+    Else
+        UnregisterForCrosshairRef()
+    EndIf
 EndFunction
 
 
 ; List Functions
 
 Function AddBottleToGlobalList(ObjectReference akBottle)
-    int formID = akBottle.GetFormID()
-
     String allBottleIDs = StorageUtil.GetStringValue(None, "DBD_PoisonedBottleIDs")
+    Int formID = akBottle.GetFormID()
 
     If allBottleIDs == ""
         allBottleIDs = formID
-    Else
-        If StringUtil.Find(allBottleIDs, formID) == -1
-            allBottleIDs += "," + formID
-        EndIf
+    ElseIf StringUtil.Find(allBottleIDs, formID) == -1
+        allBottleIDs += "," + formID
     EndIf
 
     StorageUtil.SetStringValue(None, "DBD_PoisonedBottleIDs", allBottleIDs)
@@ -95,7 +59,7 @@ EndFunction
 Function RestoreBottleNames()
     String allBottleIDs = StorageUtil.GetStringValue(None, "DBD_PoisonedBottleIDs")
     If allBottleIDs == ""
-        return
+        Return
     EndIf
 
     String[] splittedIDs = StringUtil.Split(allBottleIDs, ",")
@@ -125,19 +89,11 @@ Function DBD_CleanupBottle(ObjectReference akBottle)
 
     String allBottleIDs = StorageUtil.GetStringValue(None, "DBD_PoisonedBottleIDs")
     If allBottleIDs != ""
-        String strFormID = akBottle.GetFormID() as String
+        String strFormID = akBottle.GetFormID()
         String[] splitted = StringUtil.Split(allBottleIDs, ",")
 
-        Int idx = 0
-        While idx < splitted.Length
-            If splitted[idx] == strFormID
-                splitted = RemoveStringAt(splitted, idx)
-                idx = splitted.Length
-            EndIf
-            idx += 1
-        EndWhile
-        
-        String newBottleIDs = JoinStringArrayWithDelimiter(splitted, ",")
+        splitted = PapyrusUtil.RemoveString(splitted, strFormID)
+        String newBottleIDs = PapyrusUtil.StringJoin(splitted, ",")
         StorageUtil.SetStringValue(None, "DBD_PoisonedBottleIDs", newBottleIDs)
     EndIf
 EndFunction
@@ -148,7 +104,6 @@ EndFunction
 Function DBD_AddWitness(Actor akWitness, ObjectReference akBottle)
     String witnessKey  = "BottlePoisonsWitnesses_" + akBottle.GetFormID()
     String currentList = StorageUtil.GetStringValue(None, witnessKey)
-    
     Int witnessFormID = akWitness.GetFormID()
 
     If currentList != ""
@@ -180,21 +135,19 @@ Bool Function DBD_IsWitness(Actor akActor, ObjectReference akBottle)
 EndFunction
 
 
-Function DBD_WitnessRemoves(Actor akWitness)
-    If akWitness && !currentActor.IsBeingRidden() && (akWitness != Game.GetPlayer()) && akWitness.HasKeyword(DBD_Humanoid) && !akWitness.IsDead() && !akWitness.IsGhost()
-        akWitness.SetExpressionOverride(4, 50)
-        akWitness.SetLookAt(currentBottle, True)
-        Utility.Wait(2)
-        Debug.SendAnimationEvent(akWitness, "IdleActivatePickUp")
-        Utility.Wait(2)
-        akWitness.ClearExpressionOverride()
-        akWitness.ClearLookAt()
-        DBD_CleanupBottle(currentBottle)
-        currentBottle.Disable()
-        currentBottle.Delete()
-        observedBottle = None
-        currentBottle = None
-    EndIf
+Function DBD_WitnessRemovesThreat(Actor akWitness)
+    akWitness.SetExpressionOverride(14, 65) ;Mood - disgusted
+    akWitness.SetLookAt(currentBottle, True)
+    Utility.Wait(2)
+    Debug.SendAnimationEvent(akWitness, "IdleActivatePickUp")
+    Utility.Wait(2)
+    akWitness.ClearExpressionOverride()
+    akWitness.ClearLookAt()
+    DBD_CleanupBottle(currentBottle)
+    currentBottle.Disable()
+    currentBottle.Delete()
+    observedBottle = None
+    currentBottle = None
 EndFunction
 
 
@@ -234,71 +187,110 @@ EndEvent
 
 
 Event OnCrosshairRefChange(ObjectReference ref)
-    ConsoleUtil.SetSelectedReference(ref)
-    
-    If ConsoleUtil.GetSelectedReference().HasKeyword(DBD_Drink)
-        If StorageUtil.GetStringValue(None, "BottlePoisons_" + ConsoleUtil.GetSelectedReference().GetFormID()) != ""
-            observedBottle = ConsoleUtil.GetSelectedReference()
+    If DBD_fakeAIEnabled.GetValue() == 0.0
+        UnregisterForCrosshairRef()
+        UnregisterForUpdate()
+        observedBottle = None
+    Else
+        If ref && ref.HasKeyword(DBD_Drink)
+            ConsoleUtil.SetSelectedReference(ref)
+            If StorageUtil.GetStringValue(None, "BottlePoisons_" + ConsoleUtil.GetSelectedReference().GetFormID()) != ""
+                observedBottle = ConsoleUtil.GetSelectedReference()
 
-            Float minTime = DBD_minBottleDetectionTime.GetValue()
-            Float maxTime = DBD_maxBottleDetectionTime.GetValue()
+                Float minTime = DBD_minBottleDetectionTime.GetValue()
+                Float maxTime = DBD_maxBottleDetectionTime.GetValue()
 
-            If minTime >= maxTime
-                maxTime = minTime + 0.5
+                If minTime >= maxTime
+                    maxTime = minTime + 0.5
+                EndIf
+
+                Float DBD_BottleDetectionTime = Utility.RandomFloat(minTime, maxTime)
+                UnregisterForUpdate()
+                RegisterForUpdate(DBD_BottleDetectionTime)
             EndIf
-
-            Float DBD_BottleDetectionTime = Utility.RandomFloat(minTime, maxTime)
-            RegisterForUpdate(DBD_BottleDetectionTime)
         EndIf
     EndIf
 EndEvent
 
 
 Event OnUpdate()
-    RegisterForUpdate(5)
-    Actor npc = Game.FindClosestActorFromRef(observedBottle, DBD_maxBottleDetectionRadius.GetValue())
-    Actor potentialPoisoner = Game.FindClosestActorFromRef(npc, DBD_maxBottleDetectionRadius.GetValue())
-
-    If npc && (npc != Game.GetPlayer()) && !npc.IsCommandedActor() && !npc.IsPlayerTeammate() && !npc.IsOnMount() && !npc.IsBeingRidden() && !npc.IsDead() && !npc.IsGhost() && !npc.HasKeyword(DBD_Disallowed)
-        If npc.HasKeyword(DBD_Humanoid)
-
-            If npc.GetSleepState() == 3
-                Debug.SendAnimationEvent(npc, "IdleBedGetUp")
-            ElseIf npc.GetSitState() == 3
-                Debug.SendAnimationEvent(npc, "IdleChairGetUp")
-            EndIf
-
-            npc.SetExpressionOverride(4, 50)
-            npc.SetLookAt(observedBottle, True)
-            Utility.Wait(2)
-
-            Debug.SendAnimationEvent(npc, "IdleActivatePickUp")
-
-            Utility.Wait(2)
-            npc.EquipItem(observedBottle.GetBaseObject())
-            npc.ClearExpressionOverride()
-            npc.ClearLookAt()
-
-            If !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && (npc.GetRelationshipRank(DBD_Player) <= 0 || DBD_IsWitness(npc, observedBottle))
-                npc.SendAssaultAlarm()
-            ElseIf !Game.GetPlayer().IsDetectedBy(npc) && !npc.IsHostileToActor(potentialPoisoner) && Game.GetPlayer().IsDetectedBy(potentialPoisoner) && potentialPoisoner.HasKeyword(DBD_Humanoid) && !potentialPoisoner.IsDead() && !potentialPoisoner.IsGhost()
-                npc.StartCombat(potentialPoisoner)
-            ElseIf !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && (npc.GetRelationshipRank(DBD_Player) >= 1) && !DBD_IsWitness(npc, observedBottle)
-                Int prevRelRank = npc.GetRelationshipRank(DBD_Player)
-                ;The NPC will consider it an unpleasant accident, but the bad feeling will remain.
-                npc.SetRelationshipRank(DBD_Player, (prevRelRank - 1))
-            EndIf
-
-        Else
-            npc.EquipItem(observedBottle.GetBaseObject())
+    If (observedBottle == None) || (DBD_fakeAIEnabled.GetValue() == 0.0)
+        UnregisterForUpdate()
+    Else
+        UnregisterForUpdate()
+        RegisterForUpdate(5)
+        Actor npc = Game.FindClosestActorFromRef(observedBottle, DBD_maxBottleDetectionRadius.GetValue())
+        If (DBD_falsePoisonerEnabled.GetValue() == 1.0)
+            potentialPoisoner = Game.FindClosestActorFromRef(npc, (DBD_maxBottleDetectionRadius.GetValue() * 3))
         EndIf
 
-        DBD_Poison(npc, observedBottle.GetBaseObject(), observedBottle)
-        DBD_CleanupBottle(observedBottle)
-        observedBottle.Disable()
-        observedBottle.Delete()
-        observedBottle = None
-        UnregisterForUpdate()
+        If npc && (npc != Game.GetPlayer()) && !npc.IsCommandedActor() && !npc.IsPlayerTeammate() && !npc.IsBeingRidden() && !npc.IsDead() && !npc.IsGhost() && !npc.IsUnconscious() && !npc.HasKeyword(DBD_Disallowed) && !DBD_IsWitness(npc, observedBottle)
+            
+            If npc.IsOnMount()
+                npc.Dismount()
+            EndIf
+            
+            If npc.HasKeyword(DBD_Humanoid)
+
+                If !npc.IsInCombat()
+                    If npc.GetSleepState() == 3
+                        Debug.SendAnimationEvent(npc, "IdleBedGetUp")
+                    ElseIf npc.GetSitState() == 3
+                        Debug.SendAnimationEvent(npc, "IdleChairGetUp")
+                    EndIf
+
+                    npc.SetExpressionOverride(12, 65) ;Mood - surprized
+                    npc.SetLookAt(observedBottle, True)
+                    Utility.Wait(2)
+
+                    Debug.SendAnimationEvent(npc, "IdleActivatePickUp")
+
+                    Utility.Wait(2)
+                    npc.EquipItem(observedBottle.GetBaseObject())
+                    npc.ClearExpressionOverride()
+                    npc.ClearLookAt()
+
+                    If !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && (npc.GetRelationshipRank(DBD_Player) <= 0)
+                        npc.SendAssaultAlarm()
+                    ElseIf !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && (npc.GetRelationshipRank(DBD_Player) >= 1)
+                        Int prevRelRank = npc.GetRelationshipRank(DBD_Player)
+                        ;The NPC will consider this an unpleasant accident, but the bad feeling will remain.
+                        npc.SetRelationshipRank(DBD_Player, (prevRelRank - 1))
+                    ElseIf (DBD_falsePoisonerEnabled.GetValue() == 1.0) && !Game.GetPlayer().IsDetectedBy(npc) && potentialPoisoner && (potentialPoisoner != Game.GetPlayer()) && potentialPoisoner.HasKeyword(DBD_Humanoid) && !potentialPoisoner.IsDead() && !potentialPoisoner.IsGhost() && !potentialPoisoner.IsUnconscious() && !potentialPoisoner.HasKeyword(DBD_Disallowed) && !potentialPoisoner.IsBeingRidden()
+                        npc.SetRelationshipRank(potentialPoisoner, -4)
+                        potentialPoisoner.SetRelationshipRank(npc, -4)
+                        npc.SetAlert()
+                        potentialPoisoner.SetAlert()
+                        npc.StartCombat(potentialPoisoner)
+                        potentialPoisoner.StartCombat(npc)
+                        potentialPoisoner = None
+                    EndIf
+                
+                Else
+                    ;The NPC needs to heal/get some strength and didn't see your manipulations with an item.
+                    If (npc.GetBaseActorValue("health") > npc.GetActorValue("health")) && !DBD_IsWitness(npc, observedBottle)
+                        npc.SetLookAt(observedBottle, True)
+                        Utility.Wait(2)
+
+                        Debug.SendAnimationEvent(npc, "IdleActivatePickUp")
+
+                        Utility.Wait(2)
+                        npc.EquipItem(observedBottle.GetBaseObject())
+                        npc.ClearLookAt()
+                    EndIf
+                EndIf
+            Else
+                ;Creature NPCs don't need a complex behavior.
+                npc.EquipItem(observedBottle.GetBaseObject())
+            EndIf
+
+            DBD_Poison(npc, observedBottle.GetBaseObject(), observedBottle)
+            DBD_CleanupBottle(observedBottle)
+            observedBottle.Disable()
+            observedBottle.Delete()
+            observedBottle = None
+            UnregisterForUpdate()
+        EndIf
     EndIf
 EndEvent
 
@@ -327,6 +319,7 @@ EndEvent
 
 
 Event OnContainerChangedGlobal(ObjectReference newContainer, ObjectReference oldContainer, ObjectReference itemReference, Form baseObj, int itemCount)
+
     If baseObj.HasKeyword(DBD_Poison) && (newContainer == DBD_Container)
         DBD_Container.RemoveItem(baseObj, itemCount, True)
     
@@ -351,7 +344,7 @@ Event OnContainerChangedGlobal(ObjectReference newContainer, ObjectReference old
             If currentBottleName != (currentBottle.GetBaseObject().GetName())
                 currentBottleName += ", " + baseObj.GetName()
             Else
-                currentBottleName += " Poisoned With " + baseObj.GetName()
+                currentBottleName += ", Poisoned With " + baseObj.GetName()
             EndIf
 
             currentBottle.SetDisplayName(currentBottleName, True)
@@ -359,18 +352,18 @@ Event OnContainerChangedGlobal(ObjectReference newContainer, ObjectReference old
             AddBottleToGlobalList(currentBottle)
 
             Actor npc = Game.FindClosestActorFromRef(currentBottle, DBD_maxBottleDetectionRadius.GetValue())
-            If npc && !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && !npc.IsCommandedActor() && !npc.IsPlayerTeammate() && (npc.GetRelationshipRank(DBD_Player) <= 0) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost()
-                npc.SendAssaultAlarm()
-                Actor witness = Game.FindClosestActorFromRef(Game.GetPlayer(), DBD_maxBottleDetectionRadius.GetValue())
-                DBD_WitnessRemoves(witness)
-
-            ElseIf npc && !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && !npc.IsCommandedActor() && (npc.IsPlayerTeammate() || (npc.GetRelationshipRank(DBD_Player) >= 1)) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost()
+            If npc && !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && !npc.IsCommandedActor() && (npc.IsPlayerTeammate() || (npc.GetRelationshipRank(DBD_Player) >= 1)) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost() && !npc.IsUnconscious() && !npc.IsBeingRidden() && !npc.HasKeyword(DBD_Disallowed)
                 DBD_AddWitness(npc, currentBottle)
 
-            ElseIf npc && !npc.IsHostileToActor(DBD_Player) && !Game.GetPlayer().IsDetectedBy(npc) && !npc.IsCommandedActor() && !npc.IsPlayerTeammate() && (npc.GetRelationshipRank(DBD_Player) <= 0) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost()
-                currentBottle.SendStealAlarm(DBD_Player)
+            ElseIf npc && !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && !npc.IsCommandedActor() && !npc.IsPlayerTeammate() && (npc.GetRelationshipRank(DBD_Player) <= 0) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost() && !npc.IsUnconscious() && !npc.IsBeingRidden() && !npc.HasKeyword(DBD_Disallowed)
+                npc.SendAssaultAlarm()
+                DBD_AddWitness(npc, currentBottle)
                 Actor witness = Game.FindClosestActorFromRef(Game.GetPlayer(), DBD_maxBottleDetectionRadius.GetValue())
-                DBD_WitnessRemoves(witness)
+                DBD_WitnessRemovesThreat(witness)
+
+            ElseIf npc && Game.GetPlayer().IsDetectedBy(npc) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost() && !npc.IsUnconscious() && !npc.IsBeingRidden() && !npc.HasKeyword(DBD_Disallowed) && npc.IsInCombat()
+                ;The NPC sees that you're poisoning something during the battle.
+                DBD_AddWitness(npc, currentBottle)
             EndIf
         Else
             Debug.Notification("You cannot add more than " + DBD_maxPoisonsAmount.GetValueInt() + " poisons.")
@@ -378,18 +371,17 @@ Event OnContainerChangedGlobal(ObjectReference newContainer, ObjectReference old
             DBD_Player.AddItem(baseObj, itemCount, True)
 
             Actor npc = Game.FindClosestActorFromRef(currentBottle, DBD_maxBottleDetectionRadius.GetValue())
-            If npc && !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && !npc.IsCommandedActor() && !npc.IsPlayerTeammate() && (npc.GetRelationshipRank(DBD_Player) <= 0) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost()
-                npc.SendAssaultAlarm()
-                Actor witness = Game.FindClosestActorFromRef(Game.GetPlayer(), DBD_maxBottleDetectionRadius.GetValue())
-                DBD_WitnessRemoves(witness)
-
-            ElseIf npc && !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && !npc.IsCommandedActor() && (npc.IsPlayerTeammate() || (npc.GetRelationshipRank(DBD_Player) >= 1)) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost()
+            If npc && !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && !npc.IsCommandedActor() && (npc.IsPlayerTeammate() || (npc.GetRelationshipRank(DBD_Player) >= 1)) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost() && !npc.IsUnconscious() && !npc.IsBeingRidden() && !npc.HasKeyword(DBD_Disallowed)
                 DBD_AddWitness(npc, currentBottle)
 
-            ElseIf npc && !npc.IsHostileToActor(DBD_Player) && !Game.GetPlayer().IsDetectedBy(npc) && !npc.IsCommandedActor() && !npc.IsPlayerTeammate() && (npc.GetRelationshipRank(DBD_Player) <= 0) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost()
-                currentBottle.SendStealAlarm(DBD_Player)
+            ElseIf npc && !npc.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(npc) && !npc.IsCommandedActor() && !npc.IsPlayerTeammate() && (npc.GetRelationshipRank(DBD_Player) <= 0) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost() && !npc.IsUnconscious() && !npc.IsBeingRidden() && !npc.HasKeyword(DBD_Disallowed)
+                npc.SendAssaultAlarm()
+                DBD_AddWitness(npc, currentBottle)
                 Actor witness = Game.FindClosestActorFromRef(Game.GetPlayer(), DBD_maxBottleDetectionRadius.GetValue())
-                DBD_WitnessRemoves(witness)
+                DBD_WitnessRemovesThreat(witness)
+            
+            ElseIf npc && Game.GetPlayer().IsDetectedBy(npc) && npc.HasKeyword(DBD_Humanoid) && !npc.IsDead() && !npc.IsGhost() && !npc.IsUnconscious() && !npc.IsBeingRidden() && !npc.HasKeyword(DBD_Disallowed) && npc.IsInCombat()
+                DBD_AddWitness(npc, currentBottle)
             EndIf
         EndIf
 
@@ -398,7 +390,7 @@ Event OnContainerChangedGlobal(ObjectReference newContainer, ObjectReference old
         DBD_Container.RemoveItem(baseObj, itemCount, True)
         DBD_Player.AddItem(baseObj, itemCount, True)
 
-    ElseIf baseObj.HasKeyword(DBD_Drink) && (newContainer as Actor) && (newContainer != Game.GetPlayer()) && (oldContainer == Game.GetPlayer()) && (StorageUtil.GetStringValue(None, "BottlePoisons_" + currentBottle.GetFormID()) != "") && !(newContainer as Actor).IsDead() && !(newContainer as Actor).IsGhost()
+    ElseIf (newContainer != None) && baseObj.HasKeyword(DBD_Drink) && (newContainer as Actor) && (newContainer != Game.GetPlayer()) && (oldContainer == Game.GetPlayer()) && (StorageUtil.GetStringValue(None, "BottlePoisons_" + currentBottle.GetFormID()) != "") && !(newContainer as Actor).IsDead() && !(newContainer as Actor).IsGhost()
         currentActor = newContainer as Actor
         feltBottle = currentBottle
         Float minTime = DBD_minBottleDetectionTime.GetValue()
@@ -424,14 +416,25 @@ EndEvent
 
 Event OnUpdateGameTime()
     If currentActor && (currentActor != Game.GetPlayer())
+        If (DBD_falsePoisonerEnabled.GetValue() == 1.0)
+            potentialPoisoner = Game.FindClosestActorFromRef(currentActor, (DBD_maxBottleDetectionRadius.GetValue() * 3))
+        EndIf
         currentActor.EquipItem(feltBottle.GetBaseObject())
         
-        If !currentActor.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(currentActor) && !currentActor.IsCommandedActor() && ((!currentActor.IsPlayerTeammate() && (currentActor.GetRelationshipRank(DBD_Player) <= 0)) || DBD_IsWitness(currentActor, feltBottle)) && currentActor.HasKeyword(DBD_Humanoid)
+        If !currentActor.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(currentActor) && !currentActor.IsCommandedActor() && ((!currentActor.IsPlayerTeammate() && (currentActor.GetRelationshipRank(DBD_Player) <= 0)) || DBD_IsWitness(currentActor, feltBottle)) && !currentActor.IsUnconscious() && currentActor.HasKeyword(DBD_Humanoid) && !currentActor.HasKeyword(DBD_Disallowed)
             currentActor.SendAssaultAlarm()
-        ElseIf !currentActor.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(currentActor) && (currentActor.IsCommandedActor() || currentActor.IsPlayerTeammate() || (currentActor.GetRelationshipRank(DBD_Player) >= 1)) && !DBD_IsWitness(currentActor, feltBottle) && currentActor.HasKeyword(DBD_Humanoid)
-            ;The NPC may see it as an unpleasant accident, but will still be suspicious of you.
+        ElseIf !currentActor.IsHostileToActor(DBD_Player) && Game.GetPlayer().IsDetectedBy(currentActor) && (currentActor.IsCommandedActor() || currentActor.IsPlayerTeammate() || (currentActor.GetRelationshipRank(DBD_Player) >= 1)) && !DBD_IsWitness(currentActor, feltBottle) && !currentActor.IsUnconscious() && currentActor.HasKeyword(DBD_Humanoid) && !currentActor.HasKeyword(DBD_Disallowed)
+            ;The NPC may see this as an unpleasant accident, but will still be suspicious of you.
             Int prevRelRank = currentActor.GetRelationshipRank(DBD_Player)
             currentActor.SetRelationshipRank(DBD_Player, (prevRelRank - 3))
+        ElseIf (DBD_falsePoisonerEnabled.GetValue() == 1.0) && !Game.GetPlayer().IsDetectedBy(currentActor) && potentialPoisoner && (potentialPoisoner != Game.GetPlayer()) && potentialPoisoner.HasKeyword(DBD_Humanoid) && !potentialPoisoner.IsDead() && !potentialPoisoner.IsGhost() && !potentialPoisoner.IsUnconscious() && !potentialPoisoner.HasKeyword(DBD_Disallowed) && !potentialPoisoner.IsBeingRidden()
+            currentActor.SetRelationshipRank(potentialPoisoner, -4)
+            potentialPoisoner.SetRelationshipRank(currentActor, -4)
+            currentActor.SetAlert()
+            potentialPoisoner.SetAlert()
+            currentActor.StartCombat(potentialPoisoner)
+            potentialPoisoner.StartCombat(currentActor)
+            potentialPoisoner = None
         EndIf
 
         DBD_Poison(currentActor, feltBottle.GetBaseObject(), feltBottle)
@@ -444,8 +447,9 @@ Event OnUpdateGameTime()
 EndEvent
 
 
-Event OnObjectEquippedGlobal(Actor akActor, Form akBaseObject, ObjectReference akReference)
-    If akReference.HasKeyword(DBD_Drink)
-        DBD_Poison(akActor, akBaseObject, akReference)
+Event OnObjectEquipped(Form akBaseObject, ObjectReference akReference)
+    If akReference.HasKeyword(DBD_Drink) && (StorageUtil.GetStringValue(None, "BottlePoisons_" + akReference.GetFormID()) != "")
+        DBD_Poison(Game.GetPlayer(), akBaseObject, akReference)
+        DBD_CleanupBottle(akReference)
     EndIf
 EndEvent
