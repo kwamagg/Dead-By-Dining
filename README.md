@@ -5,7 +5,7 @@ The source code of my mod with the corresponding name.
 - SKSE https://www.nexusmods.com/skyrimspecialedition/mods/30379
 - Address Library for SKSE Plugins https://www.nexusmods.com/skyrimspecialedition/mods/32444
 - PapyrusUtil SE https://www.nexusmods.com/skyrimspecialedition/mods/13048
-- powerofthree's Papyrus Extender https://www.nexusmods.com/skyrimspecialedition/mods/65410](https://www.nexusmods.com/skyrimspecialedition/mods/22854
+- powerofthree's Papyrus Extender https://www.nexusmods.com/skyrimspecialedition/mods/22854
 - ConsoleUtilSSE NG https://www.nexusmods.com/skyrimspecialedition/mods/76649
 - Papyrus MessageBox - SKSE NG https://www.nexusmods.com/skyrimspecialedition/mods/83578
 - Keyword Item Distributor (KID) https://www.nexusmods.com/skyrimspecialedition/mods/55728
