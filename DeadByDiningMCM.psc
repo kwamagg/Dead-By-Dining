@@ -3,6 +3,7 @@ Scriptname DeadByDiningMCM extends MCM_ConfigBase
 Quest Property DeadByDiningQuest Auto
 GlobalVariable Property DBD_Hotkey Auto
 GlobalVariable Property DBD_maxPoisonsAmount Auto
+GlobalVariable Property DBD_uninstallEnabled Auto
 GlobalVariable Property DBD_fakeAIEnabled Auto
 GlobalVariable Property DBD_falsePoisonerEnabled Auto
 GlobalVariable Property DBD_maxBottleDetectionRadius Auto
@@ -59,6 +60,10 @@ Event OnSettingChange(String a_ID)
         DBD_maxPoisonsAmount.SetValue(GetModSettingInt("imaxPoisonsAmount:General") as Float)
         (DeadByDiningQuest.GetAlias(0) as ReferenceAlias).OnPlayerLoadGame()
         RefreshMenu()
+    ElseIf a_ID == "buninstallEnabled:Maintenance"
+        DBD_uninstallEnabled.SetValue(GetModSettingBool("buninstallEnabled:General") as Float)
+        (DeadByDiningQuest.GetAlias(0) as ReferenceAlias).OnPlayerLoadGame()
+        RefreshMenu()
     ElseIf a_ID == "bfakeAIEnabled:General"
         DBD_fakeAIEnabled.SetValue(GetModSettingBool("bfakeAIEnabled:General") as Float)
         (DeadByDiningQuest.GetAlias(0) as ReferenceAlias).OnPlayerLoadGame()
@@ -97,6 +102,7 @@ Function Default()
     SetModSettingBool("bEnabled:Maintenance", True)
     SetModSettingInt("iLoadingDelay:Maintenance", 0)
     SetModSettingBool("bLoadSettingsonReload:Maintenance", False)
+    SetModSettingBool("buninstallEnabled:Maintenance", False)
     Load()
 EndFunction
 
